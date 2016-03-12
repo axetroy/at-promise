@@ -8,6 +8,8 @@
   ],
   "license": "MIT",
   "keywords": [
+    "at-promise",
+    "atPromise",
     "promise"
   ],
   "moduleType": [],
