@@ -2,7 +2,7 @@
   "name": "at-promise",
   "version": "1.0.0",
   "description": "promise directive for angular",
-  "main": "app.js",
+  "main": "./dist/at-promise.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

@@ -1,7 +1,7 @@
 {
   "name": "at-promise",
   "description": "promise directive for angular",
-  "main": "at-promise.js",
+  "main": "./dist/at-promise.js",
   "authors": [
     "axetroy"
   ],
@@ -10,7 +10,8 @@
     "promise"
   ],
   "moduleType": [],
-  "homepage": "www.burningall.com",
+  "homepage": "https://github.com/axetroy/at-promise",
+  "version": "1.0",
   "ignore": [
     "**/.*",
     "node_modules",
