@@ -1,0 +1,25 @@
+{
+  "name": "at-promise",
+  "description": "promise directive for angular",
+  "main": "at-promise.js",
+  "authors": [
+    "axetroy"
+  ],
+  "license": "ISC",
+  "keywords": [
+    "promise"
+  ],
+  "moduleType": [],
+  "homepage": "www.burningall.com",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "angular": "^1.5.0",
+    "angular-animate": "^1.5.0"
+  }
+}
