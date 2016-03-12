@@ -1,8 +1,8 @@
 {
   "name": "at-promise",
-  "version": "v0.1",
+  "version": "0.3.0",
   "description": "promise directive for angular",
-  "main": "at-promise.js",
+  "main": "./at-promise.js",
   "authors": [
     "axetroy"
   ],
