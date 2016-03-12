@@ -84,10 +84,57 @@
             angular.isFunction(e.preventDefault) && e.preventDefault();
             angular.isFunction(e.stopPropagation) && e.stopPropagation();
           };
+
+          /**
+           * 渲染DOM节点
+           * ops:
+           * {
+           *    $transclude
+           *    $animate
+           *    $attr
+           *    $element
+           *    $window
+           *    block
+           *    childScope
+           * }
+           * @param ops
+           */
+          vm.renderDOM = function (ops) {
+            if (!ops.childScope) {
+              ops.$transclude(function (clone, newScope) {
+                ops.childScope = newScope;
+                clone[clone.length++] = ops.$window.document.createComment(' end ' + ops.directive + ': ' + ops.$attr[ops.directive] + ' ');
+                ops.block = {
+                  clone: clone
+                };
+                ops.$animate.enter(clone, ops.$element.parent(), ops.$element);
+              });
+            }
+          };
+          /**
+           * 移除DOM节点
+           * @param ops
+           */
+          vm.unRenderDOM = function (ops) {
+            if (ops.previousElements) {
+              ops.previousElements.remove();
+              ops.previousElements = null;
+            }
+            if (ops.childScope) {
+              ops.childScope.$destroy();
+              ops.childScope = null;
+            }
+            if (ops.block) {
+              ops.previousElements = vm.getBlockNodes(ops.block.clone);
+              ops.$animate.leave(ops.previousElements).then(function () {
+                ops.previousElements = null;
+              });
+              ops.block = null;
+            }
+          };
         }],
         link: function ($scope, $element, $attr, ctrl, $transclude) {
-          var block, childScope,
-            fnReg,									// 匹配function的正则表达式
+          var fnReg,								// 匹配function的正则表达式
             promise,								// 传入的promise对象
             promiseWatcher,					// promise的监听函数
           // TODO:让每个回调函数都能够定义上下文
@@ -95,6 +142,17 @@
             resFn,									// resolve的回调函数
             rejFn,									// reject的回调函数
             finFn;									// finally的回调函数
+
+          var ops = {
+            $transclude: $transclude,
+            $animate: $animate,
+            $attr: $attr,
+            $element: $element,
+            $window: $window,
+            block: null,
+            childScope: null,
+            directive: 'atPromise'
+          };
 
           /**
            * $0    最初传入的函数字符串
@@ -131,16 +189,7 @@
           var init = function () {
             var deferred = $q.defer();
             // 渲染视图
-            if (!childScope) {
-              $transclude(function (clone, newScope) {
-                childScope = newScope;
-                clone[clone.length++] = $window.document.createComment(' end promise: ' + $attr.promise + ' ');
-                block = {
-                  clone: clone
-                };
-                $animate.enter(clone, $element.parent(), $element);
-              });
-            }
+            ctrl.renderDOM(ops);
             // 初始化promise
             if (ctrl.isPromise(promise)) {
               ctrl.state = 'pending';
@@ -273,47 +322,22 @@
         restrict: 'A',
         require: '^?atPromise',
         link: function ($scope, $element, $attr, ctrl, $transclude) {
-          var block, childScope, previousElements;
           if (!ctrl) return;
-
-          var removeDOM = function () {
-            if (previousElements) {
-              previousElements.remove();
-              previousElements = null;
-            }
-            if (childScope) {
-              childScope.$destroy();
-              childScope = null;
-            }
-            if (block) {
-              previousElements = ctrl.getBlockNodes(block.clone);
-              $animate.leave(previousElements).then(function () {
-                previousElements = null;
-              });
-              block = null;
-            }
-          };
-
-          var appendDOM = function () {
-            if (!childScope) {
-              $transclude(function (clone, newScope) {
-                childScope = newScope;
-                clone[clone.length++] = $window.document.createComment(' end atPending: ' + $attr.atPending + ' ');
-                block = {
-                  clone: clone
-                };
-                $animate.enter(clone, $element.parent(), $element);
-              });
-            }
+          var ops = {
+            $transclude: $transclude,
+            $animate: $animate,
+            $attr: $attr,
+            $element: $element,
+            $window: $window,
+            block: null,
+            childScope: null,
+            previousElements: null,
+            directive: 'atPending'
           };
 
           $scope.$on('promiseEvent', function (e) {
             e = e || {};
-            if (ctrl.state === 'pending') {
-              appendDOM();
-            } else {
-              removeDOM();
-            }
+            ctrl.state === 'pending' ? ctrl.renderDOM(ops) : ctrl.unRenderDOM(ops);
             ctrl.stopEvent(e);
           });
 
@@ -330,39 +354,19 @@
         restrict: 'A',
         require: '^?atPromise',
         link: function ($scope, $element, $attr, ctrl, $transclude) {
-          var block, childScope, previousElements;
           var $reason = $parse($attr.atReject)($scope);
           if (!ctrl) return;
 
-          var removeDOM = function () {
-            if (previousElements) {
-              previousElements.remove();
-              previousElements = null;
-            }
-            if (childScope) {
-              childScope.$destroy();
-              childScope = null;
-            }
-            if (block) {
-              previousElements = ctrl.getBlockNodes(block.clone);
-              $animate.leave(previousElements).then(function () {
-                previousElements = null;
-              });
-              block = null;
-            }
-          };
-
-          var appendDOM = function () {
-            if (!childScope) {
-              $transclude(function (clone, newScope) {
-                childScope = newScope;
-                clone[clone.length++] = $window.document.createComment(' end atReject: ' + ctrl.atReject + ' ');
-                block = {
-                  clone: clone
-                };
-                $animate.enter(clone, $element.parent(), $element);
-              });
-            }
+          var ops = {
+            $transclude: $transclude,
+            $animate: $animate,
+            $attr: $attr,
+            $element: $element,
+            $window: $window,
+            block: null,
+            childScope: null,
+            previousElements: null,
+            directive: 'atReject'
           };
 
           $scope.$on('promiseEvent', function (e, reason) {
@@ -370,16 +374,16 @@
             if (ctrl.state === 'reject') {
               if ($attr.atReject !== undefined && $attr.atReject !== '') {
                 if (reason === $reason) {
-                  appendDOM();
+                  ctrl.renderDOM(ops);
                 } else {
-                  removeDOM();
+                  ctrl.unRenderDOM(ops);
                 }
               } else {
-                appendDOM();
+                ctrl.renderDOM(ops);
               }
             }
             else {
-              removeDOM();
+              ctrl.unRenderDOM(ops);
             }
             ctrl.stopEvent(e);
           });
@@ -396,41 +400,20 @@
         restrict: 'A',
         require: '^?atPromise',
         link: function ($scope, $element, $attr, ctrl, $transclude) {
-          var block, childScope, previousElements;
           var $reason = $parse($attr.atResolve)($scope);
 
           if (!ctrl) return;
 
-          var removeDOM = function () {
-            if (previousElements) {
-              previousElements.remove();
-              previousElements = null;
-            }
-            if (childScope) {
-              childScope.$destroy();
-              childScope = null;
-            }
-            if (block) {
-              previousElements = ctrl.getBlockNodes(block.clone);
-              $animate.leave(previousElements).then(function () {
-                previousElements = null;
-              });
-              block = null;
-            }
-          };
-
-          var appendDOM = function () {
-            if (!childScope) {
-              $transclude(function (clone, newScope) {
-                clone.addClass('hello');
-                childScope = newScope;
-                clone[clone.length++] = $window.document.createComment(' end atResolve: ' + $attr.atResolve + ' ');
-                block = {
-                  clone: clone
-                };
-                $animate.enter(clone, $element.parent(), $element);
-              });
-            }
+          var ops = {
+            $transclude: $transclude,
+            $animate: $animate,
+            $attr: $attr,
+            $element: $element,
+            $window: $window,
+            block: null,
+            childScope: null,
+            previousElements: null,
+            directive: 'atResolve'
           };
 
           $scope.$on('promiseEvent', function (e, reason) {
@@ -438,16 +421,16 @@
             if (ctrl.state === 'resolve') {
               if ($attr.atResolve !== undefined && $attr.atResolve !== '') {
                 if (reason === $reason) {
-                  appendDOM();
+                  ctrl.renderDOM(ops);
                 } else {
-                  removeDOM();
+                  ctrl.unRenderDOM(ops);
                 }
               } else {
-                appendDOM();
+                ctrl.renderDOM(ops);
               }
             }
             else {
-              removeDOM();
+              ctrl.unRenderDOM(ops);
             }
             ctrl.stopEvent(e);
           });
@@ -464,44 +447,23 @@
         restrict: 'A',
         require: '^?atPromise',
         link: function ($scope, $element, $attr, ctrl, $transclude) {
-          var block, childScope, previousElements;
           if (!ctrl) return;
 
-          var removeDOM = function () {
-            if (previousElements) {
-              previousElements.remove();
-              previousElements = null;
-            }
-            if (childScope) {
-              childScope.$destroy();
-              childScope = null;
-            }
-            if (block) {
-              previousElements = ctrl.getBlockNodes(block.clone);
-              $animate.leave(previousElements).then(function () {
-                previousElements = null;
-              });
-              block = null;
-            }
-          };
-
-          var appendDOM = function () {
-            if (!childScope) {
-              $transclude(function (clone, newScope) {
-                clone.addClass('hello');
-                childScope = newScope;
-                clone[clone.length++] = $window.document.createComment(' end atFinally: ' + $attr.atFinally + ' ');
-                block = {
-                  clone: clone
-                };
-                $animate.enter(clone, $element.parent(), $element);
-              });
-            }
+          var ops = {
+            $transclude: $transclude,
+            $animate: $animate,
+            $attr: $attr,
+            $element: $element,
+            $window: $window,
+            block: null,
+            childScope: null,
+            previousElements: null,
+            directive: 'atFinally'
           };
 
           $scope.$on('promiseEvent', function (e) {
             e = e || {};
-            ctrl.state !== 'pending' ? appendDOM() : removeDOM();
+            ctrl.state !== 'pending' ? ctrl.renderDOM(ops) : ctrl.unRenderDOM(ops);
             ctrl.stopEvent(e);
           });
 
