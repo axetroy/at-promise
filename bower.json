@@ -1,17 +1,17 @@
 {
   "name": "at-promise",
+  "version": "1.0",
   "description": "promise directive for angular",
   "main": "./at-promise.js",
   "authors": [
     "axetroy"
   ],
-  "license": "ISC",
+  "license": "MIT",
   "keywords": [
     "promise"
   ],
   "moduleType": [],
   "homepage": "https://github.com/axetroy/at-promise",
-  "version": "1.0",
   "ignore": [
     "**/.*",
     "node_modules",

@@ -2,13 +2,20 @@
   "name": "at-promise",
   "version": "1.0.0",
   "description": "promise directive for angular",
-  "main": "./at-promise.js",
+  "main": "./index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/axetroy/at-promise.git"
   },
   "keywords": [
     "promise"
   ],
   "author": "axetroy",
-  "license": "ISC"
+  "bugs": {
+    "url": "https://github.com/axetroy/at-promise/issues"
+  },
+  "license": "MIT"
 }
