@@ -1,27 +1,29 @@
 ;(function (factory) {
 	'use strict';
-	var g, module, define;
-	g = typeof window !== 'undefined' ? window : global;
-	module = g.module;
-	define = g.define;
+	var g = typeof window !== 'undefined' ? window : global;
+	var module = g.module;
+	var define = g.define;
+
+	// AMD
 	if (typeof module !== "undefined" && typeof module === "object" && typeof module.exports === "object") {
 		module.exports = factory();
 	}
+	// commonJS
 	if (typeof define !== "undefined" && typeof define == 'function' && typeof define.amd == 'object' && define.amd) {
 		define(function () {
 			return factory();
 		});
 	}
+	// browser
 	if (g.angular) {
 		factory();
 	}
 })(function () {
 	'use strict';
-	var ｇ, angular, atPromise;
-	ｇ = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : {};
-	angular = ｇ.angular || null;
+	var ｇ = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : {};
+	var angular = ｇ.angular || null;
 	if (!angular) throw new Error("this module depend on the Angular and you didn't load it");
-	atPromise = angular.module('atPromise', ['ngAnimate']);
+	var atPromise = angular.module('atPromise', ['ngAnimate']);
 
 	angular.module('atPromise')
 		.directive('atPromise', function ($animate, $parse, $timeout, $window, $q) {
@@ -35,8 +37,14 @@
 					var vm = this;
 					vm.state = 'pending';
 
+					// jQuery or jqLite
 					var jqLite = $window.$ || $window.jQuery || $window.angular.element;
 
+					/**
+					 * 获取指令下，所包含的DOM合集，所有DOM均为jQuery对象
+					 * @param nodes
+					 * @returns {*}    数组
+					 */
 					vm.getBlockNodes = function getBlockNodes(nodes) {
 						var node = nodes[0];
 						var endNode = nodes[nodes.length - 1];
@@ -54,11 +62,22 @@
 						return blockNodes || nodes;
 					};
 
+					/**
+					 * 判断是否为promise对象
+					 * 只支持$q生成的promise对象，不支持原生，或第三方
+					 * @param p
+					 * @param undefined
+					 * @returns {*}
+					 */
 					vm.isPromise = function isPromise(p, undefined) {
 						return p === undefined ? false :
 						angular.isDefined(p) && p.then && angular.isFunction(p.then) && p.$$state && p.$$state.status === 0;
 					};
 
+					/**
+					 * 停止事件的广播
+					 * @param e        angular事件对象
+					 */
 					vm.stopEvent = function (e) {
 						angular.isFunction(e.preventDefault) && e.preventDefault();
 						angular.isFunction(e.stopPropagation) && e.stopPropagation();
@@ -77,12 +96,15 @@
 					var finallyCallBack = getFn($attr.finallyCallBack) || angular.noop;
 					var finallyFnAgm = getArguments($attr.finallyCallBack) || [];
 
-					ctrl.promiseName = $attr.atPromise;
 					ctrl.reason = '';
 
+					/**
+					 * 指令初始化
+					 * @returns {*} promise
+					 */
 					var init = function () {
 						var deferred = $q.defer();
-						// render the view
+						// 渲染视图
 						if (!childScope) {
 							$transclude(function (clone, newScope) {
 								childScope = newScope;
@@ -93,7 +115,7 @@
 								$animate.enter(clone, $element.parent(), $element);
 							});
 						}
-						// init promise
+						// 初始化promise
 						if (ctrl.isPromise(promise)) {
 							ctrl.state = 'pending';
 							$scope.$broadcast('promiseEvent');
@@ -119,6 +141,11 @@
 						return deferred.promise;
 					};
 
+					/**
+					 * 监听promise的变化
+					 * 如果有新的promise覆盖旧的promise
+					 * 则重新运行指令，根据新的promise，重新渲染视图
+					 */
 					var promiseWatch = function () {
 						promiseWatcher = $scope.$watch($attr.atPromise, function (newPromise, oldPromise) {
 							if (newPromise === oldPromise || !newPromise) return;
@@ -146,29 +173,57 @@
 						});
 					};
 
+					/**
+					 * 返回传入的回调函数的参数集合
+					 * @param fnStr        函数字符串
+					 * @returns {Array}    数组
+					 */
 					function getArguments(fnStr) {
-						var result = [];
-						var agmReg = /\(([^\(\)]*)\)/i;
-						var agms = fnStr.trim().match(agmReg)[1].split(',');
+						var result,		// 返回出去的参数数组
+							agmReg,			// 提取参数的正则表达式
+							agms;				// 提取出来的参数字符串
+						fnStr = fnStr || '';
+						if (!fnStr) return;
+						result = [];
+						agmReg = /\(([^\(\)]*)\)/i;
+						agms = fnStr.trim().match(agmReg)[1].split(',');
 						angular.forEach(agms, function (v, i) {
 							result[i] = $parse(v.trim())($scope);
 						});
 						return result;
 					}
 
+					/**
+					 * 返回回调函数
+					 * @param fnStr        函数字符串
+					 * @returns {*}        function || undefined
+					 */
 					function getFn(fnStr) {
-						var result;
-						var fnReg = /^[\w_$]+/i;
-						result = fnStr.trim().replace(/\s/ig, '').match(fnReg)[0];
-						return $parse(result)($scope);
+						var result,			// 返回function
+							fnReg,				// 匹配function的正则表达式
+							resultStr;		// 提取出来的function字符串
+						fnStr = fnStr || '';
+						if (!fnStr) return;
+						fnReg = /^[\w_$]+/i;
+						resultStr = fnStr.trim().replace(/\s/ig, '').match(fnReg)[0];
+						result = $parse(resultStr)($scope);
+						return result;
 					}
 
-					// bootstrap the directive
+					/**
+					 * 启动指令
+					 */
 					$timeout(function () {
+						/**
+						 * 初始化完成后，才监听promise的变化
+						 */
 						init()
 							.then(promiseWatch, angular.noop)
 					}, 0);
 
+					/**
+					 * 销毁指令时，则销毁监听函数
+					 */
 					$scope.$on('$destroy', function () {
 						promiseWatcher && angular.isFunction(promiseWatcher) && promiseWatcher();
 					});
@@ -209,7 +264,7 @@
 						if (!childScope) {
 							$transclude(function (clone, newScope) {
 								childScope = newScope;
-								clone[clone.length++] = $window.document.createComment(' end reject: ' + ctrl.promiseName + ' ');
+								clone[clone.length++] = $window.document.createComment(' end atPending: ' + $attr.atPending + ' ');
 								block = {
 									clone: clone
 								};
@@ -267,7 +322,7 @@
 						if (!childScope) {
 							$transclude(function (clone, newScope) {
 								childScope = newScope;
-								clone[clone.length++] = $window.document.createComment(' end reject: ' + ctrl.promiseName + ' ');
+								clone[clone.length++] = $window.document.createComment(' end atReject: ' + ctrl.atReject + ' ');
 								block = {
 									clone: clone
 								};
@@ -335,7 +390,7 @@
 							$transclude(function (clone, newScope) {
 								clone.addClass('hello');
 								childScope = newScope;
-								clone[clone.length++] = $window.document.createComment(' end reject: ' + ctrl.promiseName + ' ');
+								clone[clone.length++] = $window.document.createComment(' end atResolve: ' + $attr.atResolve + ' ');
 								block = {
 									clone: clone
 								};
@@ -401,7 +456,7 @@
 							$transclude(function (clone, newScope) {
 								clone.addClass('hello');
 								childScope = newScope;
-								clone[clone.length++] = $window.document.createComment(' end reject: ' + ctrl.promiseName + ' ');
+								clone[clone.length++] = $window.document.createComment(' end atFinally: ' + $attr.atFinally + ' ');
 								block = {
 									clone: clone
 								};
