@@ -35,6 +35,8 @@
 				restrict: 'A',
 				controller: function ($window) {
 					var vm = this;
+
+					// 当前promise的状态，初始值为pending
 					vm.state = 'pending';
 
 					// jQuery or jqLite
@@ -84,17 +86,47 @@
 					};
 				},
 				link: function postLink($scope, $element, $attr, ctrl, $transclude) {
-					var block, childScope, promiseWatcher;
+					var block, childScope,
+						promiseWatcher,					// promise的监听函数
+						context,								// 回调函数的执行上下文
+						resCalBack,							// resolve的回调函数
+						resCalBackAgm,					// resolve函数的参数
+						rejCalBack,							// reject的回调函数
+						rejCalBackAgm,					// reject函数的参数
+						finCalBack,							// finally的回调函数
+						finCalBackAgm;					// finally函数的参数
+
+					// 传入的promise对象
 					var promise = $parse($attr.atPromise)($scope);
 
-					var resolveCallBack = getFn($attr.resolveCallBack) || angular.noop;
-					var resolveFnAgm = getArguments($attr.resolveCallBack) || [];
+					resCalBack = getFn($attr.resolveCallBack) || angular.noop;
+					resCalBackAgm = getArguments($attr.resolveCallBack) || [];
 
-					var rejectCallBack = getFn($attr.rejectCallBack) || angular.noop;
-					var rejectFnAgm = getArguments($attr.rejectCallBack) || [];
+					rejCalBack = getFn($attr.rejectCallBack) || angular.noop;
+					rejCalBackAgm = getArguments($attr.rejectCallBack) || [];
 
-					var finallyCallBack = getFn($attr.finallyCallBack) || angular.noop;
-					var finallyFnAgm = getArguments($attr.finallyCallBack) || [];
+					finCalBack = getFn($attr.finallyCallBack) || angular.noop;
+					finCalBackAgm = getArguments($attr.finallyCallBack) || [];
+
+					// resolve的回调函数
+					var resFn = function () {
+						resCalBack.apply(context, resCalBackAgm);
+					};
+					var rejFn = function () {
+						rejCalBack.apply(context, rejCalBackAgm);
+					};
+					var finFn = function () {
+						finCalBack.apply(context, finCalBackAgm);
+					};
+
+					//var resolveCallBack = getFn($attr.resolveCallBack) || angular.noop;
+					//var resolveFnAgm = getArguments($attr.resolveCallBack) || [];
+					//
+					//var rejectCallBack = getFn($attr.rejectCallBack) || angular.noop;
+					//var rejectFnAgm = getArguments($attr.rejectCallBack) || [];
+					//
+					//var finallyCallBack = getFn($attr.finallyCallBack) || angular.noop;
+					//var finallyFnAgm = getArguments($attr.finallyCallBack) || [];
 
 					ctrl.reason = '';
 
@@ -130,11 +162,14 @@
 								.finally(function () {
 									$scope.$broadcast('promiseEvent', ctrl.reason);
 									if (ctrl.state === 'resolve') {
-										resolveCallBack.apply(null, resolveFnAgm);
+										//resolveCallBack.apply(null, resolveFnAgm);
+										resFn();
 									} else if (ctrl.state === 'reject') {
-										rejectCallBack.apply(null, rejectFnAgm);
+										//rejectCallBack.apply(null, rejectFnAgm);
+										rejFn();
 									}
-									finallyCallBack.apply(null, finallyFnAgm);
+									//finallyCallBack.apply(null, finallyFnAgm);
+									finFn();
 									deferred.resolve();
 								});
 						}
@@ -163,11 +198,14 @@
 									.finally(function () {
 										$scope.$broadcast('promiseEvent', ctrl.reason);
 										if (ctrl.state === 'resolve') {
-											resolveCallBack.apply(null, resolveFnAgm);
+											//resolveCallBack.apply(null, resolveFnAgm);
+											resFn();
 										} else if (ctrl.state === 'reject') {
-											rejectCallBack.apply(null, rejectFnAgm);
+											//rejectCallBack.apply(null, rejectFnAgm);
+											rejFn();
 										}
-										finallyCallBack.apply(null, finallyFnAgm);
+										//finallyCallBack.apply(null, finallyFnAgm);
+										finFn();
 									});
 							}
 						});
