@@ -87,46 +87,39 @@
 				},
 				link: function postLink($scope, $element, $attr, ctrl, $transclude) {
 					var block, childScope,
+						fnReg,									// 匹配function的正则表达式
+						promise,								// 传入的promise对象
 						promiseWatcher,					// promise的监听函数
 						context,								// 回调函数的执行上下文
-						resCalBack,							// resolve的回调函数
-						resCalBackAgm,					// resolve函数的参数
-						rejCalBack,							// reject的回调函数
-						rejCalBackAgm,					// reject函数的参数
-						finCalBack,							// finally的回调函数
-						finCalBackAgm;					// finally函数的参数
+						resFn,									// resolve的回调函数
+						rejFn,									// reject的回调函数
+						finFn;									// finally的回调函数
 
-					// 传入的promise对象
-					var promise = $parse($attr.atPromise)($scope);
+					/**
+					 * $0		最初传入的函数字符串
+					 * $1		函数名
+					 * $2		带括号的参数
+					 * $3		参数集合
+					 * /开始  (函数名) 可选空格 ( (可选参数集合) ) 可选空格;/i
+					 * /^([\w_$]+)\s?(\(([^\(\)]*)\))?\s*\;*\s*$/i;
+					 * @type {RegExp}
+					 */
+					fnReg = /^([\w_$]+)\s?(\(([^\(\)]*)\))?\s*\;*\s*$/i;
 
-					resCalBack = getFn($attr.resolveCallBack) || angular.noop;
-					resCalBackAgm = getArguments($attr.resolveCallBack) || [];
+					promise = $parse($attr.atPromise)($scope);
 
-					rejCalBack = getFn($attr.rejectCallBack) || angular.noop;
-					rejCalBackAgm = getArguments($attr.rejectCallBack) || [];
-
-					finCalBack = getFn($attr.finallyCallBack) || angular.noop;
-					finCalBackAgm = getArguments($attr.finallyCallBack) || [];
-
-					// resolve的回调函数
-					var resFn = function () {
-						resCalBack.apply(context, resCalBackAgm);
+					resFn = function () {
+						if (!$attr.resolveCallBack) return;
+						getFn($attr.resolveCallBack).apply(context, getAgm($attr.resolveCallBack));
 					};
-					var rejFn = function () {
-						rejCalBack.apply(context, rejCalBackAgm);
+					rejFn = function () {
+						if (!$attr.rejectCallBack) return;
+						getFn($attr.rejectCallBack).apply(context, getAgm($attr.rejectCallBack));
 					};
-					var finFn = function () {
-						finCalBack.apply(context, finCalBackAgm);
+					finFn = function () {
+						if (!$attr.finallyCallBack) return;
+						getFn($attr.finallyCallBack).apply(context, getAgm($attr.finallyCallBack));
 					};
-
-					//var resolveCallBack = getFn($attr.resolveCallBack) || angular.noop;
-					//var resolveFnAgm = getArguments($attr.resolveCallBack) || [];
-					//
-					//var rejectCallBack = getFn($attr.rejectCallBack) || angular.noop;
-					//var rejectFnAgm = getArguments($attr.rejectCallBack) || [];
-					//
-					//var finallyCallBack = getFn($attr.finallyCallBack) || angular.noop;
-					//var finallyFnAgm = getArguments($attr.finallyCallBack) || [];
 
 					ctrl.reason = '';
 
@@ -162,13 +155,10 @@
 								.finally(function () {
 									$scope.$broadcast('promiseEvent', ctrl.reason);
 									if (ctrl.state === 'resolve') {
-										//resolveCallBack.apply(null, resolveFnAgm);
 										resFn();
 									} else if (ctrl.state === 'reject') {
-										//rejectCallBack.apply(null, rejectFnAgm);
 										rejFn();
 									}
-									//finallyCallBack.apply(null, finallyFnAgm);
 									finFn();
 									deferred.resolve();
 								});
@@ -198,13 +188,10 @@
 									.finally(function () {
 										$scope.$broadcast('promiseEvent', ctrl.reason);
 										if (ctrl.state === 'resolve') {
-											//resolveCallBack.apply(null, resolveFnAgm);
 											resFn();
 										} else if (ctrl.state === 'reject') {
-											//rejectCallBack.apply(null, rejectFnAgm);
 											rejFn();
 										}
-										//finallyCallBack.apply(null, finallyFnAgm);
 										finFn();
 									});
 							}
@@ -216,35 +203,43 @@
 					 * @param fnStr        函数字符串
 					 * @returns {Array}    数组
 					 */
-					function getArguments(fnStr) {
-						var result,		// 返回出去的参数数组
-							agmReg,			// 提取参数的正则表达式
-							agms;				// 提取出来的参数字符串
-						fnStr = fnStr || '';
-						if (!fnStr) return;
+					function getAgm(fnStr) {
+						var result,			// 返回出去的参数数组
+							agmStr;				// 提取出来的参数字符串
+						if (!fnStr) return [];
+						agmStr = fnReg.exec(fnStr)[3];
+						if (agmStr) {
+							/**
+							 * 传入的参数，不支持数组，json格式的对象
+							 * TODO：支持数组与对象
+							 * @type {Array|*}
+							 */
+							agmStr = agmStr.split(',');
+						} else {
+							return [];
+						}
 						result = [];
-						agmReg = /\(([^\(\)]*)\)/i;
-						agms = fnStr.trim().match(agmReg)[1].split(',');
-						angular.forEach(agms, function (v, i) {
-							result[i] = $parse(v.trim())($scope);
+						angular.forEach(agmStr, function (v, i) {
+							result[i] = $parse(v.trim())($scope) || undefined;
 						});
-						return result;
+						return result || [];
 					}
 
 					/**
 					 * 返回回调函数
 					 * @param fnStr        函数字符串
-					 * @returns {*}        function || undefined
+					 * @returns {*}        function
 					 */
 					function getFn(fnStr) {
 						var result,			// 返回function
-							fnReg,				// 匹配function的正则表达式
 							resultStr;		// 提取出来的function字符串
-						fnStr = fnStr || '';
-						if (!fnStr) return;
-						fnReg = /^[\w_$]+/i;
-						resultStr = fnStr.trim().replace(/\s/ig, '').match(fnReg)[0];
+						if (!fnReg.test(fnStr)) {
+							console.error('TypeError: %s is not a function', fnStr);
+							return angular.noop;
+						}
+						resultStr = fnReg.exec(fnStr)[1].replace(/\s/ig, '');
 						result = $parse(resultStr)($scope);
+						result = typeof result !== 'undefined' && angular.isFunction(result) ? result : angular.noop;
 						return result;
 					}
 
