@@ -1,7 +1,7 @@
 {
   "name": "at-promise",
   "description": "promise directive for angular",
-  "main": "./dist/at-promise.js",
+  "main": "./at-promise.js",
   "authors": [
     "axetroy"
   ],
