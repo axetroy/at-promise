@@ -25,6 +25,28 @@
   if (!angular) throw new Error("this module depend on the Angular and you didn't load it");
   var atPromise = angular.module('atPromise', ['ngAnimate']);
 
+  /**
+   * 可以用来匹配传入的回调函数或表达式
+   * @param value
+   * @returns {boolean}
+   */
+  var isEmpty = function (value) {
+    var result;
+    if (angular.isString(value)) {
+      result = !value ? true : /^[\s\;]*$/im.test(value);
+    }
+    else if (angular.isArray(value)) {
+      result = value.length ? false : true;
+    }
+    else if (value && angular.isObject(value)) {
+      result = Object.keys(value).length ? false : true;
+    }
+    else {
+      result = false;
+    }
+    return !!result;
+  };
+
   angular.module('atPromise')
     .directive('atPromise', ['$animate', '$parse', '$timeout', '$window', '$q', function ($animate, $parse, $timeout, $window, $q) {
       return {
@@ -36,7 +58,8 @@
         controller: ['$window', '$parse', function ($window, $parse) {
           var vm = this,
             jqLite,
-            fnReg;
+            MATCH_FUNCTION_REG,
+            EXPRESSION_REG;
 
           // jQuery or jqLite
           jqLite = $window.$ || $window.jQuery || $window.angular.element;
@@ -51,7 +74,16 @@
            * /^([\w_$]+)\s?(\(([^\(\)]*)\))?\s*\;*\s*$/i;
            * @type {RegExp}
            */
-          fnReg = /^([\w_$]+)\s?(\(([^\(\)]*)\))?\s*\;*\s*$/i;
+          MATCH_FUNCTION_REG = /^([\w_$]+)\s?(\(([^\(\)]*)\))?\s*\;*\s*$/i;
+
+          /**
+           * 匹配表达式的正则表达式
+           * 如：
+           * name = 123;
+           * name = true ? 'hello' : 'hi';
+           * @type {RegExp}
+           */
+          EXPRESSION_REG = /^\s*([\w_$]+)\s?\=/im;
 
           // 当前promise的状态，初始值为pending
           vm.state = 'pending';
@@ -154,7 +186,8 @@
           };
 
           /**
-           * 解析函数名
+           * 解析 函数名 或 表达式
+           *      doSome()    test = 'hello world'
            * @param fnStr
            * @returns {Function}
            */
@@ -163,43 +196,85 @@
               var result,			// 返回function
                 resultStr;		// 提取出来的function字符串
               if (!fnStr || /^[\s\;]*$/im.test(fnStr)) return angular.noop;
-              if (!fnReg.test(fnStr)) {
-                console.error('TypeError: %s is not a function', fnStr);
+
+              /**
+               * 传入function
+               * 如： doSome('axe',22);
+               */
+              if (MATCH_FUNCTION_REG.test(fnStr)) {
+                resultStr = MATCH_FUNCTION_REG.exec(fnStr)[1].replace(/\s/ig, '');
+                result = $parse(resultStr)($scope);
+                result = typeof result !== 'undefined' && angular.isFunction(result) ? result : angular.noop;
+                return result;
+              }
+              /**
+               * 传入表达式
+               * 如：
+               * name = 123;
+               * name = true ? 'hello' : 'hi';
+               */
+              else if (EXPRESSION_REG.test(fnStr)) {
+                return function () {
+                  $scope.$eval(fnStr);
+                }
+              }
+              /**
+               * 既不是表达式，也不是函数
+               */
+              else {
+                console.error('TypeError: %s is not a function or an expression', fnStr);
                 return angular.noop;
               }
-              resultStr = fnReg.exec(fnStr)[1].replace(/\s/ig, '');
-              result = $parse(resultStr)($scope);
-              result = typeof result !== 'undefined' && angular.isFunction(result) ? result : angular.noop;
-              return result;
             }
           };
 
           /**
            * 解析函数参数
-           * @param fnStr
+           * @param fnStr           function or expression string
+           * @param undefined       init undefined
            * @returns {Function}
            */
-          vm.parseFnAgm = function (fnStr) {
+          vm.parseFnAgm = function (fnStr, undefined) {
             return function ($scope) {
               var result,			// 返回出去的参数数组
                 agmStr;				// 提取出来的参数字符串
+
               if (!fnStr || /^[\s\;]*$/im.test(fnStr)) return [];
-              agmStr = fnReg.exec(fnStr)[3];
-              if (agmStr) {
-                /**
-                 * 传入的参数，不支持数组，json格式的对象
-                 * TODO：支持数组与对象
-                 * @type {Array|*}
-                 */
-                agmStr = agmStr.split(',');
-              } else {
+
+              /**
+               * 传入function
+               * 如： doSome('axe',22);
+               */
+              if (MATCH_FUNCTION_REG.test(fnStr)) {
+                agmStr = MATCH_FUNCTION_REG.exec(fnStr)[3];
+                if (agmStr) {
+                  /**
+                   * 传入的参数，不支持数组，json格式的对象
+                   * TODO：支持数组与对象
+                   * @type {Array|*}
+                   */
+                  agmStr = agmStr.split(',');
+                } else {
+                  return [];
+                }
+                result = [];
+                angular.forEach(agmStr, function (v, i) {
+                  result[i] = $parse(v.trim())($scope) || undefined;
+                });
+                return result || [];
+              }
+              /**
+               * 传入表达式
+               * 如：
+               * name = 123;
+               * name = true ? 'hello' : 'hi';
+               */
+              else if (EXPRESSION_REG.test(fnStr)) {
                 return [];
               }
-              result = [];
-              angular.forEach(agmStr, function (v, i) {
-                result[i] = $parse(v.trim())($scope) || undefined;
-              });
-              return result || [];
+              else {
+                return [];
+              }
             }
           };
 
@@ -207,12 +282,8 @@
         link: function ($scope, $element, $attr, ctrl, $transclude) {
           // TODO:让每个回调函数都能够定义上下文
           var ops,
-            promise,								// 传入的promise对象
-            promiseWatcher,					// promise的监听函数
-            context,								// 回调函数的执行上下文
-            resFn,									// resolve的回调函数
-            rejFn,									// reject的回调函数
-            finFn;									// finally的回调函数
+            promise,              // 传入的promise对象
+            promiseWatcher;       // promise的监听函数
 
           ops = {
             $transclude: $transclude,
@@ -227,17 +298,12 @@
 
           promise = $parse($attr.atPromise)($scope);
 
-          resFn = function () {
-            if (!$attr.resolveCallBack) return;
-            ctrl.parseFnName($attr.resolveCallBack)($scope).apply(context, ctrl.parseFnAgm($attr.resolveCallBack)(($scope)));
-          };
-          rejFn = function () {
-            if (!$attr.rejectCallBack) return;
-            ctrl.parseFnName($attr.rejectCallBack)($scope).apply(context, ctrl.parseFnAgm($attr.rejectCallBack)(($scope)));
-          };
-          finFn = function () {
-            if (!$attr.finallyCallBack) return;
-            ctrl.parseFnName($attr.finallyCallBack)($scope).apply(context, ctrl.parseFnAgm($attr.finallyCallBack)(($scope)));
+          var callBack = function (state) {
+            var fn, agm, context = null;
+            if (isEmpty($attr[state + 'CallBack'])) return;
+            fn = ctrl.parseFnName($attr[state + 'CallBack'])($scope);
+            agm = ctrl.parseFnAgm($attr[state + 'CallBack'])($scope);
+            fn.apply(context, agm);
           };
 
           /**
@@ -262,8 +328,8 @@
                 })
                 .finally(function () {
                   $scope.$broadcast('promiseEvent', ctrl.reason);
-                  ctrl.state === 'resolve' ? resFn() : rejFn();
-                  finFn();
+                  callBack(ctrl.state);
+                  callBack('finally');
                   deferred.resolve();
                 });
             } else {
@@ -293,8 +359,8 @@
                   })
                   .finally(function () {
                     $scope.$broadcast('promiseEvent', ctrl.reason);
-                    ctrl.state === 'resolve' ? resFn() : rejFn();
-                    finFn();
+                    callBack(ctrl.state);
+                    callBack('finally');
                   });
               }
             });
@@ -375,7 +441,12 @@
             directive: 'atReject'
           };
 
-          var callBackFn, callBackFnAgm, context;
+          var callBackFn, callBackFnAgm, context,
+            fn = function () {
+              callBackFn = ctrl.parseFnName($attr.callBack)($scope);
+              callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
+              callBackFn.apply(context, callBackFnAgm);
+            };
 
           $scope.$on('promiseEvent', function (e, reason) {
             e = e || {};
@@ -383,17 +454,13 @@
               if ($attr.atReject !== undefined && $attr.atReject !== '') {
                 if (reason === $parse($attr.atReject)($scope)) {
                   ctrl.renderDOM(ops);
-                  callBackFn = ctrl.parseFnName($attr.callBack)($scope);
-                  callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
-                  callBackFn.apply(context, callBackFnAgm);
+                  fn();
                 } else {
                   ctrl.unRenderDOM(ops);
                 }
               } else {
                 ctrl.renderDOM(ops);
-                callBackFn = ctrl.parseFnName($attr.callBack)($scope);
-                callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
-                callBackFn.apply(context, callBackFnAgm);
+                fn();
               }
             }
             else {
@@ -427,7 +494,12 @@
             directive: 'atResolve'
           };
 
-          var callBackFn, callBackFnAgm, context;
+          var callBackFn, callBackFnAgm, context,
+            fn = function () {
+              callBackFn = ctrl.parseFnName($attr.callBack)($scope);
+              callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
+              callBackFn.apply(context, callBackFnAgm);
+            };
 
           $scope.$on('promiseEvent', function (e, reason) {
             e = e || {};
@@ -435,17 +507,13 @@
               if ($attr.atResolve !== undefined && $attr.atResolve !== '') {
                 if (reason === $parse($attr.atResolve)($scope)) {
                   ctrl.renderDOM(ops);
-                  callBackFn = ctrl.parseFnName($attr.callBack)($scope);
-                  callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
-                  callBackFn.apply(context, callBackFnAgm);
+                  fn();
                 } else {
                   ctrl.unRenderDOM(ops);
                 }
               } else {
                 ctrl.renderDOM(ops);
-                callBackFn = ctrl.parseFnName($attr.callBack)($scope);
-                callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
-                callBackFn.apply(context, callBackFnAgm);
+                fn();
               }
             }
             else {
@@ -479,23 +547,26 @@
             directive: 'atFinally'
           };
 
-          var callBackFn, callBackFnAgm, context;
+          var callBackFn, callBackFnAgm, context,
+            fn = function () {
+              callBackFn = ctrl.parseFnName($attr.callBack)($scope);
+              callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
+              callBackFn.apply(context, callBackFnAgm);
+            };
 
           $scope.$on('promiseEvent', function (e, reason) {
             e = e || {};
             if (ctrl.state !== 'pending') {
-              callBackFn = ctrl.parseFnName($attr.callBack)($scope);
-              callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
               if ($attr.atFinally !== undefined && $attr.atFinally !== '') {
                 if (reason === $parse($attr.atFinally)($scope)) {
                   ctrl.renderDOM(ops);
-                  callBackFn.apply(context, callBackFnAgm);
+                  fn();
                 } else {
                   ctrl.unRenderDOM(ops);
                 }
               } else {
                 ctrl.renderDOM(ops);
-                callBackFn.apply(context, callBackFnAgm);
+                fn();
               }
             } else {
               ctrl.unRenderDOM(ops);
