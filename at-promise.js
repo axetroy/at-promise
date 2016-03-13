@@ -238,7 +238,9 @@
                     ctrl.state = 'reject';
                   })
                   .finally(function () {
+                    debugger;
                     $scope.$broadcast('promiseEvent', ctrl.reason);
+                    debugger;
                     ctrl.state === 'resolve' ? resFn() : rejFn();
                     finFn();
                   });
@@ -352,7 +354,6 @@
         restrict: 'A',
         require: '^?atPromise',
         link: function ($scope, $element, $attr, ctrl, $transclude) {
-          var $reason = $parse($attr.atReject)($scope);
           if (!ctrl) return;
 
           var ops = {
@@ -371,11 +372,7 @@
             e = e || {};
             if (ctrl.state === 'reject') {
               if ($attr.atReject !== undefined && $attr.atReject !== '') {
-                if (reason === $reason) {
-                  ctrl.renderDOM(ops);
-                } else {
-                  ctrl.unRenderDOM(ops);
-                }
+                reason === $parse($attr.atReject)($scope) ? ctrl.renderDOM(ops) : ctrl.unRenderDOM(ops);
               } else {
                 ctrl.renderDOM(ops);
               }
@@ -398,10 +395,7 @@
         restrict: 'A',
         require: '^?atPromise',
         link: function ($scope, $element, $attr, ctrl, $transclude) {
-          var $reason = $parse($attr.atResolve)($scope);
-
           if (!ctrl) return;
-
           var ops = {
             $transclude: $transclude,
             $animate: $animate,
@@ -418,11 +412,7 @@
             e = e || {};
             if (ctrl.state === 'resolve') {
               if ($attr.atResolve !== undefined && $attr.atResolve !== '') {
-                if (reason === $reason) {
-                  ctrl.renderDOM(ops);
-                } else {
-                  ctrl.unRenderDOM(ops);
-                }
+                reason === $parse($attr.atResolve)($scope) ? ctrl.renderDOM(ops) : ctrl.unRenderDOM(ops);
               } else {
                 ctrl.renderDOM(ops);
               }
@@ -436,7 +426,7 @@
         }
       };
     }])
-    .directive('atFinally', ['$animate', '$window', function ($animate, $window) {
+    .directive('atFinally', ['$animate', '$window', '$parse', function ($animate, $window, $parse) {
       return {
         multiElement: true,
         transclude: 'element',
@@ -446,7 +436,6 @@
         require: '^?atPromise',
         link: function ($scope, $element, $attr, ctrl, $transclude) {
           if (!ctrl) return;
-
           var ops = {
             $transclude: $transclude,
             $animate: $animate,
@@ -459,9 +448,17 @@
             directive: 'atFinally'
           };
 
-          $scope.$on('promiseEvent', function (e) {
+          $scope.$on('promiseEvent', function (e, reason) {
             e = e || {};
-            ctrl.state !== 'pending' ? ctrl.renderDOM(ops) : ctrl.unRenderDOM(ops);
+            if (ctrl.state !== 'pending') {
+              if ($attr.atFinally !== undefined && $attr.atFinally !== '') {
+                reason === $parse($attr.atFinally)($scope) ? ctrl.renderDOM(ops) : ctrl.unRenderDOM(ops);
+              } else {
+                ctrl.renderDOM(ops);
+              }
+            } else {
+              ctrl.unRenderDOM(ops);
+            }
             ctrl.stopEvent(e);
           });
 
