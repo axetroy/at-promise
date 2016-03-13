@@ -1,6 +1,6 @@
 ;(function (factory) {
   'use strict';
-  var g = typeof window !== 'undefined' ? window : global;
+  var g = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : {};
   var module = g.module;
   var define = g.define;
 
@@ -21,7 +21,7 @@
 })(function () {
   'use strict';
   var ｇ = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : {};
-  var angular = ｇ.angular || null;
+  var angular = ｇ.angular;
   if (!angular) throw new Error("this module depend on the Angular and you didn't load it");
   var atPromise = angular.module('atPromise', ['ngAnimate']);
 
@@ -134,10 +134,10 @@
           };
         }],
         link: function ($scope, $element, $attr, ctrl, $transclude) {
+          // TODO:让每个回调函数都能够定义上下文
           var fnReg,								// 匹配function的正则表达式
             promise,								// 传入的promise对象
             promiseWatcher,					// promise的监听函数
-          // TODO:让每个回调函数都能够定义上下文
             context,								// 回调函数的执行上下文
             resFn,									// resolve的回调函数
             rejFn,									// reject的回调函数
@@ -153,6 +153,12 @@
             childScope: null,
             directive: 'atPromise'
           };
+
+          /**
+           * resolve 或 reject的理由
+           * @type {string}
+           */
+          ctrl.reason = '';
 
           /**
            * $0    最初传入的函数字符串
@@ -180,8 +186,6 @@
             getFn($attr.finallyCallBack).apply(context, getAgm($attr.finallyCallBack));
           };
 
-          ctrl.reason = '';
-
           /**
            * 指令初始化
            * @returns {*} promise
@@ -204,14 +208,12 @@
                 })
                 .finally(function () {
                   $scope.$broadcast('promiseEvent', ctrl.reason);
-                  if (ctrl.state === 'resolve') {
-                    resFn();
-                  } else if (ctrl.state === 'reject') {
-                    rejFn();
-                  }
+                  ctrl.state === 'resolve' ? resFn() : rejFn();
                   finFn();
                   deferred.resolve();
                 });
+            } else {
+              deferred.resolve();
             }
             return deferred.promise;
           };
@@ -237,11 +239,7 @@
                   })
                   .finally(function () {
                     $scope.$broadcast('promiseEvent', ctrl.reason);
-                    if (ctrl.state === 'resolve') {
-                      resFn();
-                    } else if (ctrl.state === 'reject') {
-                      rejFn();
-                    }
+                    ctrl.state === 'resolve' ? resFn() : rejFn();
                     finFn();
                   });
               }
