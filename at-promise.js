@@ -125,7 +125,7 @@
            */
           vm.isPromise = function isPromise(p, undefined) {
             return p === undefined ? false :
-            angular.isDefined(p) && p.then && angular.isFunction(p.then) && p.$$state && p.$$state.status === 0;
+              !!(angular.isDefined(p) && p.then && angular.isFunction(p.then) && p.$$state && p.$$state.status === 0);
           };
 
           /**
