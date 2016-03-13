@@ -110,13 +110,36 @@ angular.module('angularTestApp')
 # 指令
 * at-promise
  * 属性
- * resolve-call-back
- * reject-call-back
- * finally-call-back
+ * resolve-call-back	(回调函数)
+ * reject-call-back	(回调函数)
+ * finally-call-back	(回调函数)
 * at-pending
 * at-resolve
+ * 属性
+ * call-back	(回调函数)
 * at-reject
+ * 属性
+ * call-back	(回调函数)
 * at-finally
+ * 属性
+ * call-back	(回调函数)
+
+### 回调函数说明
+
+#### ``at-promise``
+
+> ``at-promise``有3个回调函数``resolve-call-back``、``reject-call-back``和``finally-call-back``
+> 该回调函数分别在promise响应之后执行
+
+#### ``at-resolve``、``at-reject``和``at-finally``
+
+> 分别在该视图，被成功渲染出来后执行
+
+所有回调函数，是在promise响应后，并且渲染视图之后调用
+
+可以传入``callBack``或``callBack()``这样的形式，可以传入参数，参数为angular表达式
+    
+如``callBack(name,age)``，name和age分别是挂载在$scope下的变量，传入字符串则是``callBack('axetroy','22')``
 
 # 依赖
 
@@ -145,12 +168,6 @@ angular
 * at-promise
 
 主要指令，所有指令必须包含在这个这令下面
-    
-所有回调函数，是在promise响应后，并且渲染试图之后调用
-
-可以传入``callBack``或``callBack()``这样的形式，可以传入参数，参数为angular表达式
-    
-如``callBack(name,age)``，name和age分别是挂载在$scope下的变量，传入字符串则是``callBack('axetroy','22')``
 
 ```js
 angular.module('angularTestApp')
@@ -276,7 +293,7 @@ angular.module('angularTestApp')
 ```
 * at-finally
 
-不过最终结果是resolve还是reject，都会被渲染
+无论最终结果是resolve还是reject，都会被渲染
 
 ```js
 angular.module('angularTestApp')
