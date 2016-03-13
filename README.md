@@ -4,7 +4,105 @@
 
 当promise更新时(新的promise覆盖旧的promise)，指令会重新根据新的promise渲染视图。
 
-这样就可以达到reload的效果...
+# 应用场景
+
+* http请求数据有结果之后(无论是reject或resolve)，才显示模板，不再是使用ng-if或ng-show，还有闪一下的毛病
+* 根据resolve或reject，显示不同的模板提示用户
+```html
+  <div at-promise="pro.promise">
+    <div at-resolve>
+      <!--成功之后要显示的内容-->
+    </div>
+    <div at-reject>
+      <p>哎呀，数据加载出错了。请刷新重试</p>
+    </div>
+  </div>
+ ```
+* 出错了，还可以重新刷新
+```js
+angular.module('angularTestApp')
+  .controller('AboutCtrl', function ($scope, $q) {
+    $scope.pro = $q.defer();
+    // some aync action
+    //...
+    
+    $scope.refreshPromise = function(){
+      // cover with a new promise
+      $scope.pro = $q.defer();
+      // some aync action,make the new promise to resolve or reject
+      //...
+    }
+  });
+```
+```html
+  <div at-promise="pro.promise">
+    <div at-resolve>
+      <!--成功之后要显示的内容-->
+    </div>
+    <div at-reject>
+      <p>哎呀，数据加载出错了。请刷新重试</p>
+      <input type="button" value="重新刷新" ng-click="refreshPromise()"/>
+    </div>
+  </div>
+```
+
+* 根据不同的结果，显示不同的模板内容
+
+比如下面这个例子，获取评论列表，如果有评论（成功获取到数据），则resolve('has data')，如果为空数据，则resolve('no data')，如果是服务器响应失败，或者某种原因获取失败，则reject，分别显示3种不同的模块
+
+当然不局限与此，关键是怎么使用reason(理由)，不同的reason可以显示不同模块
+
+```js
+angular.module('angularTestApp')
+  .controller('AboutCtrl', function ($scope, $q，$timeout,$http) {
+    $scope.pro = $q.defer();
+    
+    // 模拟HTTP操作
+    $timeout(function(){
+      $http.get('/comments/...').$promise
+       .then(function(resp){
+          if(resp.data){
+            // 带了个理由resolve，reason：‘has data’;
+            $scope.pro.resolve('has data');
+          }else{
+            // 带了个理由resolve，reason:'no data';
+            $scope.pro.resolve('no data');
+          }
+       },function(error){
+        // 不带理由的reject
+        $scope.pro.reject();
+       });
+    },2000);
+    
+    $scope.refreshPromise = function(){
+      // cover with a new promise
+      $scope.pro = $q.defer();
+      // some aync action,make the new promise to resolve or reject
+      //...
+    }
+  });
+```
+
+```html
+  <div at-promise="pro.promise">
+    <div at-resolve="'has data'">
+      <!--成功之后,并且resolve的理由为'has data'，才渲染-->
+      ...评论列表
+    </div>
+    
+    <div at-resolve="'no data'">
+      <!--成功之后，并且resolve的理由为'no data'，才渲染-->
+      <p>还没有人评论，赶快来抢沙发吧！</p>
+    </div>
+    
+    <div at-reject>
+      <!--数据加载失败-->
+      <p>哎呀，数据加载出错了。请刷新重试</p>
+      <input type="button" value="重新刷新" ng-click="refreshPromise()"/>
+    </div>
+  </div>
+```
+
 
 # demo
 尚未完成
