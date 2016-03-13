@@ -238,9 +238,7 @@
                     ctrl.state = 'reject';
                   })
                   .finally(function () {
-                    debugger;
                     $scope.$broadcast('promiseEvent', ctrl.reason);
-                    debugger;
                     ctrl.state === 'resolve' ? resFn() : rejFn();
                     finFn();
                   });
