@@ -4,17 +4,14 @@
   var module = g.module;
   var define = g.define;
 
-  // AMD
   if (typeof module !== "undefined" && typeof module === "object" && typeof module.exports === "object") {
     module.exports = factory();
   }
-  // commonJS
   if (typeof define !== "undefined" && typeof define == 'function' && typeof define.amd == 'object' && define.amd) {
     define(function () {
       return factory();
     });
   }
-  // browser
   if (g.angular) {
     factory();
   }
@@ -85,6 +82,12 @@
            */
           EXPRESSION_REG = /^\s*([\w_$]+)\s?\=/im;
 
+          /**
+           * 控制器唯一标识符
+           * @type {string}
+           */
+          vm.symbol = $window.Symbol ? $window.Symbol(Math.random().toFixed(10)) : Math.random().toFixed(10);
+
           // 当前promise的状态，初始值为pending
           vm.state = 'pending';
 
@@ -124,8 +127,7 @@
            * @returns {*}
            */
           vm.isPromise = function isPromise(p, undefined) {
-            return p === undefined ? false :
-              !!(angular.isDefined(p) && p.then && angular.isFunction(p.then) && p.$$state && p.$$state.status === 0);
+            return p === undefined || !p ? false : !!(angular.isDefined(p) && p.then && angular.isFunction(p.then));
           };
 
           /**
@@ -306,18 +308,12 @@
             fn.apply(context, agm);
           };
 
-          /**
-           * 指令初始化
-           * @returns {*} promise
-           */
-          var init = function () {
-            var deferred = $q.defer();
-            // 渲染视图
-            ctrl.renderDOM(ops);
-            // 初始化promise
+          var loadPromise = function (promise) {
             if (ctrl.isPromise(promise)) {
+              // init data
+              ctrl.reason = '';
               ctrl.state = 'pending';
-              $scope.$broadcast('promiseEvent');
+              $scope.$broadcast('newPromise');
               promise
                 .then(function (reason) {
                   ctrl.reason = reason;
@@ -327,15 +323,40 @@
                   ctrl.state = 'reject';
                 })
                 .finally(function () {
-                  $scope.$broadcast('promiseEvent', ctrl.reason);
+                  /**
+                   * 为空则表示不进入resolve或reject,该promise其实已响应过了
+                   */
+                  if (!ctrl.reason) {
+                    // resolve
+                    if (promise.$$state && promise.$$state.status !== undefined && promise.$$state.status === 1) {
+                      ctrl.state = 'resolve';
+                    }
+                    // reject
+                    else {
+                      ctrl.state = 'reject';
+                    }
+                    ctrl.reason = promise.$$state.value;
+                  }
+
+                  $scope.$broadcast(ctrl.state + 'Promise');
+
+                  $scope.$broadcast('donePromise');
+
                   callBack(ctrl.state);
                   callBack('finally');
-                  deferred.resolve();
                 });
-            } else {
-              deferred.resolve();
             }
-            return deferred.promise;
+          };
+
+          /**
+           * 指令初始化
+           * @returns {*} promise
+           */
+          var init = function () {
+            // 渲染视图
+            ctrl.renderDOM(ops);
+            // 初始化promise
+            loadPromise(promise);
           };
 
           /**
@@ -347,21 +368,7 @@
             promiseWatcher = $scope.$watch($attr.atPromise, function (newPromise, oldPromise) {
               if (newPromise === oldPromise || !newPromise) return;
               if (ctrl.isPromise(newPromise)) {
-                ctrl.state = 'pending';
-                $scope.$broadcast('promiseEvent');
-                newPromise
-                  .then(function (reason) {
-                    ctrl.reason = reason;
-                    ctrl.state = 'resolve';
-                  }, function (reason) {
-                    ctrl.reason = reason;
-                    ctrl.state = 'reject';
-                  })
-                  .finally(function () {
-                    $scope.$broadcast('promiseEvent', ctrl.reason);
-                    callBack(ctrl.state);
-                    callBack('finally');
-                  });
+                loadPromise(newPromise);
               }
             });
           };
@@ -370,11 +377,8 @@
            * 启动指令
            */
           $timeout(function () {
-            /**
-             * 初始化完成后，才监听promise的变化
-             */
-            init()
-              .then(promiseWatch, angular.noop)
+            init();
+            promiseWatch();
           }, 0);
 
           /**
@@ -408,9 +412,13 @@
             directive: 'atPending'
           };
 
-          $scope.$on('promiseEvent', function (e) {
-            e = e || {};
-            ctrl.state === 'pending' ? ctrl.renderDOM(ops) : ctrl.unRenderDOM(ops);
+          $scope.$on('newPromise', function (e) {
+            ctrl.renderDOM(ops);
+            ctrl.stopEvent(e);
+          });
+
+          $scope.$on('donePromise', function (e) {
+            ctrl.unRenderDOM(ops);
             ctrl.stopEvent(e);
           });
 
@@ -448,23 +456,22 @@
               callBackFn.apply(context, callBackFnAgm);
             };
 
-          $scope.$on('promiseEvent', function (e, reason) {
-            e = e || {};
-            if (ctrl.state === 'reject') {
-              if ($attr.atReject !== undefined && $attr.atReject !== '') {
-                if (reason === $parse($attr.atReject)($scope)) {
-                  ctrl.renderDOM(ops);
-                  fn();
-                } else {
-                  ctrl.unRenderDOM(ops);
-                }
-              } else {
+          $scope.$on('newPromise', function (e) {
+            ctrl.unRenderDOM(ops);
+            ctrl.stopEvent(e);
+          });
+
+          $scope.$on('rejectPromise', function (e) {
+            if (!isEmpty($attr.atReject)) {
+              // at-resolve === reason
+              if (!isEmpty(ctrl.reason) && ctrl.reason === $parse($attr.atReject)($scope)) {
                 ctrl.renderDOM(ops);
                 fn();
               }
             }
             else {
-              ctrl.unRenderDOM(ops);
+              ctrl.renderDOM(ops);
+              fn();
             }
             ctrl.stopEvent(e);
           });
@@ -482,6 +489,9 @@
         require: '^?atPromise',
         link: function ($scope, $element, $attr, ctrl, $transclude) {
           if (!ctrl) return;
+
+          console.log(ctrl);
+
           var ops = {
             $transclude: $transclude,
             $animate: $animate,
@@ -491,7 +501,8 @@
             block: null,
             childScope: null,
             previousElements: null,
-            directive: 'atResolve'
+            directive: 'atResolve',
+            watcher: null
           };
 
           var callBackFn, callBackFnAgm, context,
@@ -501,27 +512,25 @@
               callBackFn.apply(context, callBackFnAgm);
             };
 
-          $scope.$on('promiseEvent', function (e, reason) {
-            e = e || {};
-            if (ctrl.state === 'resolve') {
-              if ($attr.atResolve !== undefined && $attr.atResolve !== '') {
-                if (reason === $parse($attr.atResolve)($scope)) {
-                  ctrl.renderDOM(ops);
-                  fn();
-                } else {
-                  ctrl.unRenderDOM(ops);
-                }
-              } else {
+          $scope.$on('newPromise', function (e) {
+            ctrl.unRenderDOM(ops);
+            ctrl.stopEvent(e);
+          });
+
+          $scope.$on('resolvePromise', function (e) {
+            if (!isEmpty($attr.atResolve)) {
+              // at-promise === reason
+              if (!isEmpty(ctrl.reason) && ctrl.reason === $parse($attr.atResolve)($scope)) {
                 ctrl.renderDOM(ops);
                 fn();
               }
             }
             else {
-              ctrl.unRenderDOM(ops);
+              ctrl.renderDOM(ops);
+              fn();
             }
             ctrl.stopEvent(e);
           });
-
         }
       };
     }])
@@ -554,22 +563,21 @@
               callBackFn.apply(context, callBackFnAgm);
             };
 
-          $scope.$on('promiseEvent', function (e, reason) {
-            e = e || {};
-            if (ctrl.state !== 'pending') {
-              if ($attr.atFinally !== undefined && $attr.atFinally !== '') {
-                if (reason === $parse($attr.atFinally)($scope)) {
-                  ctrl.renderDOM(ops);
-                  fn();
-                } else {
-                  ctrl.unRenderDOM(ops);
-                }
-              } else {
+          $scope.$on('promise-new', function (e) {
+            ctrl.unRenderDOM(ops);
+            ctrl.stopEvent(e);
+          });
+
+          $scope.$on('promise-done', function (e) {
+            if (!isEmpty($attr.atFinally)) {
+              if (!isEmpty(ctrl.reason) && ctrl.reason === $parse($attr.atFinally)($scope)) {
                 ctrl.renderDOM(ops);
                 fn();
               }
-            } else {
-              ctrl.unRenderDOM(ops);
+            }
+            else {
+              ctrl.renderDOM(ops);
+              fn();
             }
             ctrl.stopEvent(e);
           });
