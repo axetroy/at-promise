@@ -1,24 +1,23 @@
 ;(function (factory) {
   'use strict';
-  var g = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : {};
+  var g = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this;
   var module = g.module;
   var define = g.define;
+  var angular = g.angular;
 
   if (typeof module !== "undefined" && typeof module === "object" && typeof module.exports === "object") {
-    module.exports = factory();
+    module.exports = factory(angular);
   }
   if (typeof define !== "undefined" && typeof define == 'function' && typeof define.amd == 'object' && define.amd) {
     define(function () {
-      return factory();
+      return factory(angular);
     });
   }
   if (g.angular) {
-    factory();
+    factory(angular);
   }
-})(function () {
+})(function (angular) {
   'use strict';
-  var ｇ = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : {};
-  var angular = ｇ.angular;
   if (!angular) throw new Error("this module depend on the Angular and you didn't load it");
   var atPromise = angular.module('atPromise', ['ngAnimate']);
 
@@ -45,7 +44,7 @@
   };
 
   angular.module('atPromise')
-    .directive('atPromise', ['$animate', '$parse', '$timeout', '$window', '$q', function ($animate, $parse, $timeout, $window, $q) {
+    .directive('atPromise', ['$animate', '$parse', '$timeout', '$window', function ($animate, $parse, $timeout, $window) {
       return {
         multiElement: true,
         transclude: 'element',
@@ -489,8 +488,6 @@
         require: '^?atPromise',
         link: function ($scope, $element, $attr, ctrl, $transclude) {
           if (!ctrl) return;
-
-          console.log(ctrl);
 
           var ops = {
             $transclude: $transclude,
