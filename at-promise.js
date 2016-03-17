@@ -13,7 +13,7 @@
       return factory(angular);
     });
   }
-  if (g.angular) {
+  if (angular) {
     factory(angular);
   }
 })(function (angular) {
@@ -560,12 +560,12 @@
               callBackFn.apply(context, callBackFnAgm);
             };
 
-          $scope.$on('promise-new', function (e) {
+          $scope.$on('newPromise', function (e) {
             ctrl.unRenderDOM(ops);
             ctrl.stopEvent(e);
           });
 
-          $scope.$on('promise-done', function (e) {
+          $scope.$on('donePromise', function (e) {
             if (!isEmpty($attr.atFinally)) {
               if (!isEmpty(ctrl.reason) && ctrl.reason === $parse($attr.atFinally)($scope)) {
                 ctrl.renderDOM(ops);
