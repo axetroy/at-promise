@@ -22,6 +22,52 @@
   var atPromise = angular.module('atPromise', ['ngAnimate']);
 
   /**
+   * 匹配函数的正则表达式
+   * $0    最初传入的函数字符串
+   * $1    函数名
+   * $2    带括号的参数
+   * $3    参数集合
+   * /开始  (函数名) 可选空格 ( (可选参数集合) ) 可选空格;/i
+   * /^([\w_$]+)\s?(\(([^\(\)]*)\))?\s*\;*\s*$/i;
+   * @type {RegExp}
+   */
+  var MATCH_FUNCTION_REG = /^([\w\_\$\.]+)\s?(\(([^\(\)]*)\))?\s*\;*\s*$/i;
+
+  /**
+   * 匹配表达式的正则表达式
+   * 如：
+   * name = 123;
+   * name = true ? 'hello' : 'hi';
+   * @type {RegExp}
+   */
+  var EXPRESSION_REG = /^\s*([\w_$]+)\s?\=/im;
+
+  // jQuery or jqLite
+  var jqLite = angular.element || window.$ || window.jQuery;
+
+  /**
+   * 获取指令下，所包含的DOM合集，所有DOM均为jQuery对象
+   * @param nodes
+   * @returns {*}    数组
+   */
+  var getBlockNodes = function (nodes) {
+    var node = nodes[0];
+    var endNode = nodes[nodes.length - 1];
+    var blockNodes;
+
+    for (var i = 1; node !== endNode && (node = node.nextSibling); i++) {
+      if (blockNodes || nodes[i] !== node) {
+        if (!blockNodes) {
+          blockNodes = jqLite(slice.call(nodes, 0, i));
+        }
+        blockNodes.push(node);
+      }
+    }
+
+    return blockNodes || nodes;
+  };
+
+  /**
    * 可以用来匹配传入的回调函数或表达式
    * @param value
    * @returns {boolean}
@@ -43,105 +89,30 @@
     return !!result;
   };
 
-  angular.module('atPromise')
-    .directive('atPromise', ['$animate', '$parse', '$timeout', '$window', function ($animate, $parse, $timeout, $window) {
-      return {
-        multiElement: true,
-        transclude: 'element',
-        priority: 999,
-        terminal: true,
-        restrict: 'A',
-        controller: ['$window', '$parse', function ($window, $parse) {
-          var vm = this,
-            jqLite,
-            MATCH_FUNCTION_REG,
-            EXPRESSION_REG;
+  /**
+   * 判断是否为promise对象
+   * 只支持$q生成的promise对象，不支持原生，或第三方
+   * @param p
+   * @param undefined
+   * @returns {*}
+   */
+  var isPromise = function (p, undefined) {
+    return p === undefined || !p ? false : !!(angular.isDefined(p) && p.then && angular.isFunction(p.then));
+  };
 
-          // jQuery or jqLite
-          jqLite = $window.$ || $window.jQuery || $window.angular.element;
+  /**
+   * 停止事件的广播
+   * @param e        angular事件对象
+   */
+  var stopEvent = function (e) {
+    angular.isFunction(e.preventDefault) && e.preventDefault();
+    angular.isFunction(e.stopPropagation) && e.stopPropagation();
+  };
 
-          /**
-           * 匹配函数的正则表达式
-           * $0    最初传入的函数字符串
-           * $1    函数名
-           * $2    带括号的参数
-           * $3    参数集合
-           * /开始  (函数名) 可选空格 ( (可选参数集合) ) 可选空格;/i
-           * /^([\w_$]+)\s?(\(([^\(\)]*)\))?\s*\;*\s*$/i;
-           * @type {RegExp}
-           */
-          MATCH_FUNCTION_REG = /^([\w_$]+)\s?(\(([^\(\)]*)\))?\s*\;*\s*$/i;
-
-          /**
-           * 匹配表达式的正则表达式
-           * 如：
-           * name = 123;
-           * name = true ? 'hello' : 'hi';
-           * @type {RegExp}
-           */
-          EXPRESSION_REG = /^\s*([\w_$]+)\s?\=/im;
-
-          /**
-           * 控制器唯一标识符
-           * @type {string}
-           */
-          vm.symbol = $window.Symbol ? $window.Symbol(Math.random().toFixed(10)) : Math.random().toFixed(10);
-
-          // 当前promise的状态，初始值为pending
-          vm.state = 'pending';
-
-          /**
-           * resolve 或 reject的理由
-           * @type {string}
-           */
-          vm.reason = '';
-
-          /**
-           * 获取指令下，所包含的DOM合集，所有DOM均为jQuery对象
-           * @param nodes
-           * @returns {*}    数组
-           */
-          vm.getBlockNodes = function getBlockNodes(nodes) {
-            var node = nodes[0];
-            var endNode = nodes[nodes.length - 1];
-            var blockNodes;
-
-            for (var i = 1; node !== endNode && (node = node.nextSibling); i++) {
-              if (blockNodes || nodes[i] !== node) {
-                if (!blockNodes) {
-                  blockNodes = jqLite(slice.call(nodes, 0, i));
-                }
-                blockNodes.push(node);
-              }
-            }
-
-            return blockNodes || nodes;
-          };
-
-          /**
-           * 判断是否为promise对象
-           * 只支持$q生成的promise对象，不支持原生，或第三方
-           * @param p
-           * @param undefined
-           * @returns {*}
-           */
-          vm.isPromise = function isPromise(p, undefined) {
-            return p === undefined || !p ? false : !!(angular.isDefined(p) && p.then && angular.isFunction(p.then));
-          };
-
-          /**
-           * 停止事件的广播
-           * @param e        angular事件对象
-           */
-          vm.stopEvent = function (e) {
-            angular.isFunction(e.preventDefault) && e.preventDefault();
-            angular.isFunction(e.stopPropagation) && e.stopPropagation();
-          };
-
-          /**
-           * 渲染DOM节点
-           * ops:
-           * {
+  /**
+   * 渲染DOM节点
+   * ops:
+   * {
            *    $transclude
            *    $animate
            *    $attr
@@ -150,41 +121,87 @@
            *    block
            *    childScope
            * }
-           * @param ops
-           */
-          vm.renderDOM = function (ops) {
-            if (!ops.childScope) {
-              ops.$transclude(function (clone, newScope) {
-                ops.childScope = newScope;
-                clone[clone.length++] = ops.$window.document.createComment(' end ' + ops.directive + ': ' + ops.$attr[ops.directive] + ' ');
-                ops.block = {
-                  clone: clone
-                };
-                ops.$animate.enter(clone, ops.$element.parent(), ops.$element);
-              });
-            }
-          };
+   * @param ops
+   */
+  var renderDOM = function (ops) {
+    if (!ops.childScope) {
+      ops.$transclude(function (clone, newScope) {
+        ops.childScope = newScope;
+        clone[clone.length++] = ops.$window.document.createComment(' end ' + ops.directive + ': ' + ops.$attr[ops.directive] + ' ');
+        ops.block = {
+          clone: clone
+        };
+        ops.$animate.enter(clone, ops.$element.parent(), ops.$element);
+      });
+    }
+  };
+
+  /**
+   * 移除DOM节点
+   * @param ops
+   */
+  var unRenderDOM = function (ops) {
+    if (ops.previousElements) {
+      ops.previousElements.remove();
+      ops.previousElements = null;
+    }
+    if (ops.childScope) {
+      ops.childScope.$destroy();
+      ops.childScope = null;
+    }
+    if (ops.block) {
+      ops.previousElements = getBlockNodes(ops.block.clone);
+      ops.$animate.leave(ops.previousElements).then(function () {
+        ops.previousElements = null;
+      });
+      ops.block = null;
+    }
+  };
+
+  /**
+   * 生成各指令的回调函数
+   */
+  var generator = function (ops) {
+    var fn, agm, context;
+    var name = '';
+    if (ops.directive === 'atPromise') {
+      // promise 指令的回调函数
+      name = ops.$attr[ops.ctrl.state + 'CallBack'];
+    } else {
+      // resolve reject finally 的回调函数
+      name = ops.$attr.callBack;
+    }
+
+    if (isEmpty(ops.$attr.callBack)) return;
+
+    fn = ops.ctrl.parseFnName(name)(ops.$scope);
+    agm = ops.ctrl.parseFnAgm(name)(ops.$scope);
+    fn.apply(context, agm);
+  };
+
+  angular.module('atPromise')
+    .directive('atPromise', ['$animate', '$parse', '$timeout', '$window', function ($animate, $parse, $timeout, $window) {
+      return {
+        multiElement: true,
+        transclude: 'element',
+        priority: 999,
+        terminal: true,
+        restrict: 'A',
+        controller: function () {
+          var vm = this;
+
           /**
-           * 移除DOM节点
-           * @param ops
+           * 当前promise的状态
+           * 初始值为pending
+           * @type {string}
            */
-          vm.unRenderDOM = function (ops) {
-            if (ops.previousElements) {
-              ops.previousElements.remove();
-              ops.previousElements = null;
-            }
-            if (ops.childScope) {
-              ops.childScope.$destroy();
-              ops.childScope = null;
-            }
-            if (ops.block) {
-              ops.previousElements = vm.getBlockNodes(ops.block.clone);
-              ops.$animate.leave(ops.previousElements).then(function () {
-                ops.previousElements = null;
-              });
-              ops.block = null;
-            }
-          };
+          vm.state = 'pending';
+
+          /**
+           * resolve 或 reject的理由
+           * @type {string}
+           */
+          vm.reason = '';
 
           /**
            * 解析 函数名 或 表达式
@@ -279,26 +296,38 @@
             }
           };
 
-        }],
+        },
         link: function ($scope, $element, $attr, ctrl, $transclude) {
-          // TODO:让每个回调函数都能够定义上下文
-          var ops,
-            promise,              // 传入的promise对象
-            promiseWatcher;       // promise的监听函数
+          /**
+           * promise的监听函数
+           * type:function
+           */
+          var promiseWatcher;
 
-          ops = {
+          /**
+           * 传入的promise对象
+           * type:promise
+           */
+          var promise = $parse($attr.atPromise)($scope);
+
+          var ops = {
+            $scope: $scope,
+            $element: $element,
+            $attr: $attr,
             $transclude: $transclude,
             $animate: $animate,
-            $attr: $attr,
-            $element: $element,
             $window: $window,
+            $parse: $parse,
             block: null,
             childScope: null,
             directive: 'atPromise'
           };
 
-          promise = $parse($attr.atPromise)($scope);
 
+          /**
+           * 根据状态,返回回调函数
+           * @param state
+           */
           var callBack = function (state) {
             var fn, agm, context = null;
             if (isEmpty($attr[state + 'CallBack'])) return;
@@ -308,7 +337,7 @@
           };
 
           var loadPromise = function (promise) {
-            if (ctrl.isPromise(promise)) {
+            if (isPromise(promise)) {
               // init data
               ctrl.reason = '';
               ctrl.state = 'pending';
@@ -337,11 +366,24 @@
                     ctrl.reason = promise.$$state.value;
                   }
 
+                  /**
+                   * 向下广播resolve或reject事件
+                   */
                   $scope.$broadcast(ctrl.state + 'Promise');
 
+                  /**
+                   * resolve或reject的回调
+                   */
+                  callBack(ctrl.state);
+
+                  /**
+                   * 向下广播finally事件
+                   */
                   $scope.$broadcast('donePromise');
 
-                  callBack(ctrl.state);
+                  /**
+                   * finally的回调
+                   */
                   callBack('finally');
                 });
             }
@@ -353,7 +395,7 @@
            */
           var init = function () {
             // 渲染视图
-            ctrl.renderDOM(ops);
+            renderDOM(ops);
             // 初始化promise
             loadPromise(promise);
           };
@@ -363,10 +405,10 @@
            * 如果有新的promise覆盖旧的promise
            * 则重新运行指令，根据新的promise，重新渲染视图
            */
-          var promiseWatch = function () {
+          var promiseWatchFn = function () {
             promiseWatcher = $scope.$watch($attr.atPromise, function (newPromise, oldPromise) {
               if (newPromise === oldPromise || !newPromise) return;
-              if (ctrl.isPromise(newPromise)) {
+              if (isPromise(newPromise)) {
                 loadPromise(newPromise);
               }
             });
@@ -377,7 +419,7 @@
            */
           $timeout(function () {
             init();
-            promiseWatch();
+            promiseWatchFn();
           }, 0);
 
           /**
@@ -400,10 +442,12 @@
         link: function ($scope, $element, $attr, ctrl, $transclude) {
           if (!ctrl) return;
           var ops = {
+            $scope: $scope,
+            $element: $element,
+            $attr: $attr,
+            ctrl: ctrl,
             $transclude: $transclude,
             $animate: $animate,
-            $attr: $attr,
-            $element: $element,
             $window: $window,
             block: null,
             childScope: null,
@@ -412,13 +456,13 @@
           };
 
           $scope.$on('newPromise', function (e) {
-            ctrl.renderDOM(ops);
-            ctrl.stopEvent(e);
+            renderDOM(ops);
+            stopEvent(e);
           });
 
           $scope.$on('donePromise', function (e) {
-            ctrl.unRenderDOM(ops);
-            ctrl.stopEvent(e);
+            unRenderDOM(ops);
+            stopEvent(e);
           });
 
         }
@@ -437,42 +481,38 @@
           if (!ctrl) return;
 
           var ops = {
+            $scope: $scope,
+            $element: $element,
+            $attr: $attr,
+            ctrl: ctrl,
             $transclude: $transclude,
             $animate: $animate,
-            $attr: $attr,
-            $element: $element,
             $window: $window,
+            $parse: $parse,
             block: null,
             childScope: null,
             previousElements: null,
             directive: 'atReject'
           };
 
-          var callBackFn, callBackFnAgm, context,
-            fn = function () {
-              callBackFn = ctrl.parseFnName($attr.callBack)($scope);
-              callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
-              callBackFn.apply(context, callBackFnAgm);
-            };
-
           $scope.$on('newPromise', function (e) {
-            ctrl.unRenderDOM(ops);
-            ctrl.stopEvent(e);
+            unRenderDOM(ops);
+            stopEvent(e);
           });
 
           $scope.$on('rejectPromise', function (e) {
             if (!isEmpty($attr.atReject)) {
               // at-resolve === reason
               if (!isEmpty(ctrl.reason) && ctrl.reason === $parse($attr.atReject)($scope)) {
-                ctrl.renderDOM(ops);
-                fn();
+                renderDOM(ops);
+                generator(ops);
               }
             }
             else {
-              ctrl.renderDOM(ops);
-              fn();
+              renderDOM(ops);
+              generator(ops);
             }
-            ctrl.stopEvent(e);
+            stopEvent(e);
           });
 
         }
@@ -490,11 +530,14 @@
           if (!ctrl) return;
 
           var ops = {
+            $scope: $scope,
+            $element: $element,
+            $attr: $attr,
+            ctrl: ctrl,
             $transclude: $transclude,
             $animate: $animate,
-            $attr: $attr,
-            $element: $element,
             $window: $window,
+            $parse: $parse,
             block: null,
             childScope: null,
             previousElements: null,
@@ -502,31 +545,24 @@
             watcher: null
           };
 
-          var callBackFn, callBackFnAgm, context,
-            fn = function () {
-              callBackFn = ctrl.parseFnName($attr.callBack)($scope);
-              callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
-              callBackFn.apply(context, callBackFnAgm);
-            };
-
           $scope.$on('newPromise', function (e) {
-            ctrl.unRenderDOM(ops);
-            ctrl.stopEvent(e);
+            unRenderDOM(ops);
+            stopEvent(e);
           });
 
           $scope.$on('resolvePromise', function (e) {
             if (!isEmpty($attr.atResolve)) {
               // at-promise === reason
               if (!isEmpty(ctrl.reason) && ctrl.reason === $parse($attr.atResolve)($scope)) {
-                ctrl.renderDOM(ops);
-                fn();
+                renderDOM(ops);
+                generator(ops);
               }
             }
             else {
-              ctrl.renderDOM(ops);
-              fn();
+              renderDOM(ops);
+              generator(ops);
             }
-            ctrl.stopEvent(e);
+            stopEvent(e);
           });
         }
       };
@@ -542,41 +578,46 @@
         link: function ($scope, $element, $attr, ctrl, $transclude) {
           if (!ctrl) return;
           var ops = {
+            $scope: $scope,
+            $element: $element,
+            $attr: $attr,
+            ctrl: ctrl,
             $transclude: $transclude,
             $animate: $animate,
-            $attr: $attr,
-            $element: $element,
             $window: $window,
+            $parse: $parse,
             block: null,
             childScope: null,
             previousElements: null,
             directive: 'atFinally'
           };
 
-          var callBackFn, callBackFnAgm, context,
-            fn = function () {
-              callBackFn = ctrl.parseFnName($attr.callBack)($scope);
-              callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
-              callBackFn.apply(context, callBackFnAgm);
-            };
+          //var callBackFn, callBackFnAgm, context,
+          //  fn = function () {
+          //    callBackFn = ctrl.parseFnName($attr.callBack)($scope);
+          //    callBackFnAgm = ctrl.parseFnAgm($attr.callBack)($scope);
+          //    callBackFn.apply(context, callBackFnAgm);
+          //  };
 
           $scope.$on('newPromise', function (e) {
-            ctrl.unRenderDOM(ops);
-            ctrl.stopEvent(e);
+            unRenderDOM(ops);
+            stopEvent(e);
           });
 
           $scope.$on('donePromise', function (e) {
             if (!isEmpty($attr.atFinally)) {
               if (!isEmpty(ctrl.reason) && ctrl.reason === $parse($attr.atFinally)($scope)) {
-                ctrl.renderDOM(ops);
-                fn();
+                renderDOM(ops);
+                generator(ops);
+                //fn();
               }
             }
             else {
-              ctrl.renderDOM(ops);
-              fn();
+              renderDOM(ops);
+              generator(ops);
+              //fn();
             }
-            ctrl.stopEvent(e);
+            stopEvent(e);
           });
 
         }
