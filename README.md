@@ -4,6 +4,12 @@
 
 当promise更新时(新的promise覆盖旧的promise)，指令会重新根据新的promise渲染视图。
 
+# 已废弃
+
+新的promise指令
+
+[https://github.com/axetroy/ng-promise](https://github.com/axetroy/ng-promise)
+
 # 应用场景
 
 * http请求数据有结果之后(无论是reject或resolve)，才显示模板，不再是使用ng-if或ng-show，还有闪一下的毛病
