@@ -1,5 +1,7 @@
 # Angular的promise指令
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/axetroy/at-promise.svg)](https://greenkeeper.io/)
+
 根据promise的结果，渲染不同的视图
 
 当promise更新时(新的promise覆盖旧的promise)，指令会重新根据新的promise渲染视图。
